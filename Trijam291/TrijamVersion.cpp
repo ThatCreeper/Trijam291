@@ -142,7 +142,8 @@ struct Slot {
 		cash = 100 + mod * 15;
 		float r = ((float)rand() / (float)RAND_MAX);
 		tmod = 1 + (r - 0.5f) * 0.2f;
-		playing = 5 + r * 3;
+		playing = 4 + GetRandomValue(-1, 1);
+		PlaySound(SND_DETECTION);
 	}
 };
 
@@ -189,20 +190,21 @@ enum TutorialState {
 };
 
 const char *tutoriallines[] = {
-	"Hello! Do you see that slot machine? There's someone playing at it right now! Try to make them get three different numbers.",
-	"Can you make them get two of the same number? Click a previous number to choose it again.",
-	"How about three?",
+	"Hello! Do you see that slot machine? There's someone playing at it right now! Click each spinning number to lock them in as random.",
+	"When a number is randomly chosen, there will never be duplicates. Make them get same number thrice by clicking a previously locked in slot (purple).",
+	"How about only twice?",
 	"The ':(' is a 'bomb'. If they get one, they'll always lose all of their bet.",
 	"The '!' is a 'payout'. This will always give them at least a 100% payout, and more if there's a payout match.",
 	"Money (above this text) is a finite resource. You get the inverse of what the players get. If you run out, the game is over.",
 	"People's happiness (on the right) is also a finite resource. The more people win, the more they'll want to spend and come back. Run out and you lose.",
 	"You can press [m] or [n] to buy things! When it takes people too long to get access to a machine, they'll get angry. [n] buys a new machine.",
-	"Ads increase how much people will spend. You can buy them with [m]."
+	"Ads increase how much people will spend. You can buy them with [m].",
+	"People play 3-5 rounds per session. If you aren't getting through people fast enough, you'll lose happiness.",
 	""
 };
 
 float GetReplaceTime(float elapsed) {
-	return 60 - sqrtf(elapsed / 60) * 10;
+	return 60 - elapsed / 12;
 }
 
 bool ShowDeathScreen(bool bank, int cash, int maxcash, float time) {
@@ -230,10 +232,10 @@ bool TrijamRunGame() {
 	int fadein = 0;
 	bool restart = false;
 	Slot slots[6] = { {} };
-	int slotsi = 6;
+	int slotsi = 1;
 	int bank = 750;
 	int maxbank = bank;
-	float happiness = 0.5f;
+	float happiness = 0.8f;
 	int admod = 1;
 	TutorialState ts = TS_BET;
 	bool buffer = false;
@@ -254,16 +256,19 @@ bool TrijamRunGame() {
 				if (ts == TS_PURCHASE1) {
 					ts = TS_PURCHASE2;
 				}
+				PlaySound(SND_REPAIR);
 				buffer = false;
 				cash = true;
 			}
 			else if (bank < 500) {
 				cash = false;
 				buffer = false;
+				PlaySound(SND_DIE);
 			}
 			else if (bank < 550) {
 				buffer = true;
 				cash = true;
+				PlaySound(SND_DIE);
 			}
 		}
 		if (IsKeyPressed(KEY_M) && ts >= TS_PURCHASE2) {
@@ -273,16 +278,19 @@ bool TrijamRunGame() {
 				if (ts == TS_PURCHASE2) {
 					ts = TS_OVER;
 				}
+				PlaySound(SND_REPAIR);
 				buffer = false;
 				cash = true;
 			}
 			else if (bank < 150) {
 				cash = false;
 				buffer = false;
+				PlaySound(SND_DIE);
 			}
 			else {
 				buffer = true;
 				cash = true;
+				PlaySound(SND_DIE);
 			}
 		}
 
@@ -291,6 +299,7 @@ bool TrijamRunGame() {
 			Slot &slot = slots[i];
 			slot.animtime += GetFrameTime();
 			if (slot.state == SS_REQ) {
+				PlaySound(SND_MENU1);
 				if (MouseOnSlots(i)) {
 					if (MousePressSpecificSlot(i, 0)) {
 						if (slot.locked_results == 0)
@@ -298,6 +307,7 @@ bool TrijamRunGame() {
 						else
 							slot.results[slot.locked_results] = slot.results[0];
 						slot.locked_results++;
+						PlaySound(SND_REPAIR);
 					}
 					else if (MousePressSpecificSlot(i, 1) && slot.locked_results >= 1) {
 						if (slot.locked_results == 1)
@@ -305,6 +315,7 @@ bool TrijamRunGame() {
 						else
 							slot.results[slot.locked_results] = slot.results[1];
 						slot.locked_results++;
+						PlaySound(SND_REPAIR);
 					}
 					else if (MousePressSpecificSlot(i, 2) && slot.locked_results >= 2) {
 						if (slot.locked_results == 2)
@@ -312,12 +323,15 @@ bool TrijamRunGame() {
 						else
 							slot.results[slot.locked_results] = slot.results[2];
 						slot.locked_results++;
+						PlaySound(SND_REPAIR);
 					}
-					else if (MousePressSpecificSlot(i, 2, 2)) {
+					else if (ts >= TS_BOMB && MousePressSpecificSlot(i, 2, 2)) {
 						slot.results[slot.locked_results++] = SLOTS_BOMB;
+						PlaySound(SND_DIE);
 					}
-					else if (MousePressSpecificSlot(i, 2, 1)) {
+					else if (ts >= TS_WIN && MousePressSpecificSlot(i, 2, 1)) {
 						slot.results[slot.locked_results++] = SLOTS_WIN;
+						PlaySound(SND_COMBO);
 					}
 				}
 
@@ -344,12 +358,12 @@ bool TrijamRunGame() {
 						}
 					}
 					else if (ts == TS_TWO) {
-						if (slot.GetMatches() == 2) {
+						if (slot.GetMatches() == 3) {
 							ts = TS_THREE;
 						}
 					}
 					else if (ts == TS_THREE) {
-						if (slot.GetMatches() == 3) {
+						if (slot.GetMatches() == 2) {
 							ts = TS_BOMB;
 						}
 					}
@@ -368,6 +382,7 @@ bool TrijamRunGame() {
 					}
 					else if (ts == TS_RESPECT) {
 						ts = TS_PURCHASE1;
+						start = GetTime();
 					}
 				}
 				slot.Randomize();
@@ -407,12 +422,14 @@ bool TrijamRunGame() {
 			}
 		}
 
-		if (ts >= TS_PURCHASE1)
+		if (ts >= TS_PURCHASE1) {
 			last_replace += GetFrameTime();
-		if (last_replace > GetReplaceTime(GetTime() - start)) {
-			happiness -= 0.13;
-			failrep = 2;
-			last_replace = 0;
+			if (last_replace > GetReplaceTime(GetTime() - start)) {
+				happiness -= 0.13;
+				failrep = 2;
+				last_replace = 0;
+				PlaySound(SND_EXPLOSION);
+			}
 		}
 
 		happiness = Clamp(happiness, 0, 1);
@@ -472,11 +489,11 @@ bool TrijamRunGame() {
 		}
 		failrep -= GetFrameTime();
 
-		if (ts != TS_OVER) {
+		//if (ts != TS_OVER) {
 			DrawText(tutoriallines[ts], 10, 600 - 55, 10, YELLOW);
-		}
+		//}
 
-		DrawKeybindBar("", "[n] $500 machine [m] $150 advert");
+		DrawKeybindBar("", ts >= TS_PURCHASE1 ? "[n] $500 machine [m] $150 advert" : "");
 
 		DoFadeInAnimation(fadein);
 

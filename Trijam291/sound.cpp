@@ -4,7 +4,8 @@ static SoundID snd_dont_repeat[] = {
 	SND_PROGRESS,
 	SND_PROGRESS1,
 	SND_DIE,
-	SND_GAME_OVER
+	SND_GAME_OVER,
+	SND_MENU1
 };
 
 Sound sndf_menu;
@@ -18,6 +19,7 @@ Sound sndf_progress1;
 Sound sndf_detection;
 Sound sndf_explosion;
 Sound sndf_fire;
+Sound sndf_menu1;
 
 void LoadSounds() {
 	sndf_menu = LoadSound("snd/menu.wav");
@@ -31,6 +33,7 @@ void LoadSounds() {
 	sndf_detection = LoadSound("snd/detection.wav");
 	sndf_explosion = LoadSound("snd/explosion.wav");
 	sndf_fire = LoadSound("snd/fire.wav");
+	sndf_menu1 = LoadSoundAlias(sndf_menu);
 }
 
 Sound GetSound(SoundID id) {
@@ -65,6 +68,8 @@ Sound GetSound(SoundID id) {
 		return sndf_explosion;
 	case SND_FIRE:
 		return sndf_fire;
+	case SND_MENU1:
+		return sndf_menu1;
 	}
 }
 
