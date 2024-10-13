@@ -50,7 +50,7 @@ bool PickFlags() {
 		ClearBackground(BLACK);
 
 		// TODO: Replace this.
-		DrawText("Edition of Moongram:", 15, 15, 20, WHITE);
+		DrawText("Edition of Slots Fixer:", 15, 15, 20, WHITE);
 
 		DrawLine(15, 45, 395, 45, overflow);
 		DrawLine(15, 85, 395, 85, overflow);

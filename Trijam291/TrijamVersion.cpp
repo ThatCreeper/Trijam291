@@ -147,20 +147,20 @@ struct Slot {
 };
 
 bool MouseOnSlots(int i) {
-	float dist = 80 * i;
+	float dist = 90 * i;
 	Vector2 m = GetMousePosition();
 	return CheckCollisionPointRec(m, { dist, 0, 80, 80 });
 }
 
 bool MouseOnSpecificSlot(int i, int j) {
-	float dist = 80 * i;
+	float dist = 90 * i;
 	float sdist = 30 * j;
 	Vector2 m = GetMousePosition();
 	return CheckCollisionPointRec(m, { dist + sdist - 10, 0, 30, 25 });
 }
 
 bool MouseOnSpecificSlot(int i, int j, int y) {
-	float dist = 80 * i;
+	float dist = 90 * i;
 	float sdist = 30 * j;
 	float ydist = 30 * y;
 	Vector2 m = GetMousePosition();
@@ -183,45 +183,76 @@ enum TutorialState {
 	TS_WIN,
 	TS_MONEY,
 	TS_RESPECT,
-	TS_PURCHASE,
+	TS_PURCHASE1,
+	TS_PURCHASE2,
 	TS_OVER
 };
 
 const char *tutoriallines[] = {
 	"Hello! Do you see that slot machine? There's someone playing at it right now! Try to make them get three different numbers.",
-	"Can you make them get two of the same number?",
+	"Can you make them get two of the same number? Click a previous number to choose it again.",
 	"How about three?",
 	"The ':(' is a 'bomb'. If they get one, they'll always lose all of their bet.",
 	"The '!' is a 'payout'. This will always give them at least a 100% payout, and more if there's a payout match.",
-	"Money (above this text) is a finite resource. If you run out, the game is over. It is now enabled!",
+	"Money (above this text) is a finite resource. You get the inverse of what the players get. If you run out, the game is over.",
 	"People's happiness (on the right) is also a finite resource. The more people win, the more they'll want to spend and come back. Run out and you lose.",
-	"You can press [m] or [n] to buy things! Multiple people playing at once reduces passive happiness drain. Ads increase spending.",
+	"You can press [m] or [n] to buy things! When it takes people too long to get access to a machine, they'll get angry. [n] buys a new machine.",
+	"Ads increase how much people will spend. You can buy them with [m]."
 	""
 };
+
+float GetReplaceTime(float elapsed) {
+	return 60 - sqrtf(elapsed / 60) * 10;
+}
+
+bool ShowDeathScreen(bool bank, int cash, int maxcash, float time) {
+	const char *c = bank
+		? TextFormat("You ran out of cash after %.1f seconds. Your balance peaked at $%d.", time, maxcash)
+		: TextFormat("Everyone hates your business, but people didn't fully hate it for %.1f seconds.\n\nAt the end, you had $%d, and you peaked at $%d.", time, cash, maxcash);
+	while (!WindowShouldClose()) {
+		if (IsKeyPressed(KEY_ENTER))
+			return true;
+
+		BeginDrawing();
+
+		ClearBackground(BLACK);
+
+		DrawText(c, 10, 10, 10, WHITE);
+
+		DrawKeybindBar("[enter] Play again", "");
+
+		EndDrawing();
+	}
+	return false;
+}
 
 bool TrijamRunGame() {
 	int fadein = 0;
 	bool restart = false;
 	Slot slots[6] = { {} };
-	int slotsi = 1;
-	int bank = 500;
+	int slotsi = 6;
+	int bank = 750;
+	int maxbank = bank;
 	float happiness = 0.5f;
 	int admod = 1;
 	TutorialState ts = TS_BET;
 	bool buffer = false;
 	bool cash = true;
+	float start = GetTime();
+	float last_replace = 0;
+	float failrep = 0;
 
 	PlaySound(SND_START);
 	DoFadeOutAnimation();
 
 	while (!WindowShouldClose()) {
-		if (IsKeyPressed(KEY_N) && ts >= TS_PURCHASE) {
+		if (IsKeyPressed(KEY_N) && ts >= TS_PURCHASE1) {
 			if (slotsi < 6 && bank >= 550) {
 				slots[slotsi].Reset(happiness, admod);
 				slotsi++;
 				bank -= 500;
-				if (ts == TS_PURCHASE) {
-					ts = TS_OVER;
+				if (ts == TS_PURCHASE1) {
+					ts = TS_PURCHASE2;
 				}
 				buffer = false;
 				cash = true;
@@ -235,11 +266,11 @@ bool TrijamRunGame() {
 				cash = true;
 			}
 		}
-		if (IsKeyPressed(KEY_M) && ts >= TS_PURCHASE) {
+		if (IsKeyPressed(KEY_M) && ts >= TS_PURCHASE2) {
 			if (bank >= 200) {
 				admod++;
 				bank -= 150;
-				if (ts == TS_PURCHASE) {
+				if (ts == TS_PURCHASE2) {
 					ts = TS_OVER;
 				}
 				buffer = false;
@@ -336,11 +367,11 @@ bool TrijamRunGame() {
 						ts = TS_RESPECT;
 					}
 					else if (ts == TS_RESPECT) {
-						ts = TS_PURCHASE;
+						ts = TS_PURCHASE1;
 					}
 				}
 				slot.Randomize();
-				if (ts == TS_RESPECT)
+				if (ts >= TS_RESPECT)
 					happiness -= (GetFrameTime() * 0.01f * 0.4f * slot.tmod) / (slotsi * 1.5f);
 			}
 			else if (slot.state == SS_DONE) {
@@ -376,17 +407,32 @@ bool TrijamRunGame() {
 			}
 		}
 
+		if (ts >= TS_PURCHASE1)
+			last_replace += GetFrameTime();
+		if (last_replace > GetReplaceTime(GetTime() - start)) {
+			happiness -= 0.13;
+			failrep = 2;
+			last_replace = 0;
+		}
+
 		happiness = Clamp(happiness, 0, 1);
+		maxbank = Max(bank, maxbank);
 		
-		assert(happiness > 0);
-		assert(bank >= 0);
+		if (happiness <= 0) {
+			restart = ShowDeathScreen(false, bank, maxbank, GetTime() - start);
+			goto END;
+		}
+		if (bank < 0) {
+			restart = ShowDeathScreen(true, 0, maxbank, GetTime() - start);
+			goto END;
+		}
 
 		BeginDrawing();
 
 		ClearBackground(BLACK);
 
 		for (int i = 0; i < slotsi; i++) {
-			int distance = 80 * i;
+			int distance = 90 * i;
 			Slot &slot = slots[i];
 			if (MouseOnSlots(i))
 				DrawRectangle(distance, 0, 80, 80, DARKGRAY);
@@ -405,7 +451,7 @@ bool TrijamRunGame() {
 			DrawText(TextFormat("%+d", lw), distance + 25, 20 + 20 + 10, 10, lw == 0 ? GRAY : lw > 0 ? GREEN : RED);
 		}
 
-		DrawText(TextFormat("Happiness: %.1f%%\nBank: %d", happiness * 100, bank), 0, 80, 10, YELLOW);
+		//DrawText(TextFormat("Happiness: %.1f%%\nBank: %d", happiness * 100, bank), 0, 80, 10, YELLOW);
 
 		DrawText(TextFormat("$%d", bank), 10, 600 - 55 - 10 - 30, 30, cash ? GREEN : RED);
 		if (buffer) {
@@ -419,6 +465,12 @@ bool TrijamRunGame() {
 		float a = ((20 + 20) * happiness) + ((600 - 60 - 20) * (1 - happiness));
 		DrawCircle(800 - 20, a, 20, WHITE);
 		DrawText(":)", 800 - 25, a - 10, 20, BLACK);
+
+		if (failrep > 0) {
+			const char *c = "This is taking too long...";
+			DrawText(c, 800 - MeasureText(c, 10) - 10, 600 - 55 - 10 - 10, 10, RED);
+		}
+		failrep -= GetFrameTime();
 
 		if (ts != TS_OVER) {
 			DrawText(tutoriallines[ts], 10, 600 - 55, 10, YELLOW);
